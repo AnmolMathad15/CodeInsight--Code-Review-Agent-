@@ -17,6 +17,10 @@ export const reviewsTable = pgTable("reviews", {
   linesAnalyzed: integer("lines_analyzed"),
   currentStep: text("current_step"),
   errorMessage: text("error_message"),
+  scoresSecurity: real("scores_security"),
+  scoresMaintainability: real("scores_maintainability"),
+  scoresComplexity: real("scores_complexity"),
+  scoresDuplication: real("scores_duplication"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

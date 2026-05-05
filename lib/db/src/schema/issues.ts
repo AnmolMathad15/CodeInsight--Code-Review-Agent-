@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, real, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -15,6 +15,11 @@ export const issuesTable = pgTable("issues", {
   oldCode: text("old_code"),
   newCode: text("new_code"),
   fixSuggestion: text("fix_suggestion"),
+  confidenceScore: real("confidence_score"),
+  impactLevel: text("impact_level").default("safe"),
+  affectedFiles: text("affected_files").array(),
+  dependencyChain: text("dependency_chain").array(),
+  fixApplied: boolean("fix_applied").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
