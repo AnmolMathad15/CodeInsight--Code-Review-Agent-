@@ -1,11 +1,8 @@
 import { useRef, useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { motion, useScroll, useTransform } from "framer-motion";
-import { Shield, Code2, Zap, GitBranch, Lock, Eye, ChevronRight, Terminal, AlertTriangle, CheckCircle } from "lucide-react";
-import { SiGithub, SiGoogle } from "react-icons/si";
-import { useSignIn } from "@clerk/react";
-import { Button } from "@/components/ui/button";
+import { motion, useAnimationFrame } from "framer-motion";
 
+/* ─── Particle canvas background ─── */
 function ParticleCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -13,429 +10,408 @@ function ParticleCanvas() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-
-    let animId: number;
-    const resize = () => {
-      canvas.width = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-    };
+    let raf: number;
+    const resize = () => { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; };
     resize();
     window.addEventListener("resize", resize);
-
-    const particles = Array.from({ length: 70 }, () => ({
+    const pts = Array.from({ length: 90 }, () => ({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
-      vx: (Math.random() - 0.5) * 0.4,
-      vy: (Math.random() - 0.5) * 0.4,
-      size: Math.random() * 2 + 0.5,
-      opacity: Math.random() * 0.5 + 0.1,
+      vx: (Math.random() - 0.5) * 0.35,
+      vy: (Math.random() - 0.5) * 0.35,
+      r: Math.random() * 1.5 + 0.4,
+      o: Math.random() * 0.4 + 0.08,
     }));
-
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (const p of particles) {
-        p.x += p.vx;
-        p.y += p.vy;
+      for (const p of pts) {
+        p.x += p.vx; p.y += p.vy;
         if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
         if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(139, 92, 246, ${p.opacity})`;
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(139,92,246,${p.o})`;
         ctx.fill();
       }
-
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x;
-          const dy = particles[i].y - particles[j].y;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
           const d = Math.sqrt(dx * dx + dy * dy);
-          if (d < 120) {
+          if (d < 110) {
             ctx.beginPath();
-            ctx.moveTo(particles[i].x, particles[i].y);
-            ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = `rgba(139, 92, 246, ${0.12 * (1 - d / 120)})`;
-            ctx.lineWidth = 0.6;
+            ctx.moveTo(pts[i].x, pts[i].y);
+            ctx.lineTo(pts[j].x, pts[j].y);
+            ctx.strokeStyle = `rgba(139,92,246,${0.12 * (1 - d / 110)})`;
+            ctx.lineWidth = 0.5;
             ctx.stroke();
           }
         }
       }
-      animId = requestAnimationFrame(draw);
+      raf = requestAnimationFrame(draw);
     };
     draw();
-    return () => {
-      cancelAnimationFrame(animId);
-      window.removeEventListener("resize", resize);
-    };
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
   }, []);
   return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
 }
 
-const features = [
-  {
-    icon: Shield,
-    title: "Security Analysis",
-    desc: "AI detects vulnerabilities, injection risks, and authentication flaws before they reach production.",
-    color: "text-red-400",
-    glow: "group-hover:shadow-red-500/20",
-  },
-  {
-    icon: Code2,
-    title: "Code Quality",
-    desc: "Identify code smells, antipatterns, and maintainability issues with detailed explanations.",
-    color: "text-purple-400",
-    glow: "group-hover:shadow-purple-500/20",
-  },
-  {
-    icon: Zap,
-    title: "Architecture Review",
-    desc: "Get high-level feedback on system design, coupling, and architectural patterns.",
-    color: "text-blue-400",
-    glow: "group-hover:shadow-blue-500/20",
-  },
-  {
-    icon: GitBranch,
-    title: "PR Diff Analysis",
-    desc: "Review only what changed. Submit a PR URL for focused, diff-aware analysis.",
-    color: "text-green-400",
-    glow: "group-hover:shadow-green-500/20",
-  },
+/* ─── Typewriter hook ─── */
+function useTypewriter(text: string, speed = 85, delay = 1300) {
+  const [displayed, setDisplayed] = useState("");
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    let i = 0;
+    const t = setTimeout(() => {
+      const iv = setInterval(() => {
+        i++;
+        setDisplayed(text.slice(0, i));
+        if (i >= text.length) { clearInterval(iv); setDone(true); }
+      }, speed);
+      return () => clearInterval(iv);
+    }, delay);
+    return () => clearTimeout(t);
+  }, [text, speed, delay]);
+  return { displayed, done };
+}
+
+/* ─── Orbital rings canvas ─── */
+function OrbitalRings({ size }: { size: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const angleRef = useRef(0);
+
+  useAnimationFrame((_, delta) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    const cx = W / 2, cy = H / 2;
+    angleRef.current += (delta / 1000) * (2 * Math.PI / 13);
+    ctx.clearRect(0, 0, W, H);
+
+    const r1 = W * 0.46, r2 = W * 0.38, r3 = W * 0.30;
+
+    // Static faint rings
+    for (const [r, alpha, lw] of [[r2, 0.22, 1.5], [r3, 0.13, 1]] as [number, number, number][]) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(139,92,246,${alpha})`;
+      ctx.lineWidth = lw;
+      ctx.stroke();
+    }
+
+    // Bright outer ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, r1, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(100,80,220,0.35)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Rotating glowing arc
+    const a = angleRef.current;
+    const arcGrad = ctx.createLinearGradient(
+      cx + Math.cos(a) * r1, cy + Math.sin(a) * r1,
+      cx + Math.cos(a + Math.PI) * r1, cy + Math.sin(a + Math.PI) * r1
+    );
+    arcGrad.addColorStop(0, "rgba(124,58,237,0)");
+    arcGrad.addColorStop(0.35, "rgba(139,92,246,1)");
+    arcGrad.addColorStop(0.65, "rgba(59,130,246,1)");
+    arcGrad.addColorStop(1, "rgba(59,130,246,0)");
+    ctx.beginPath();
+    ctx.arc(cx, cy, r1, a, a + Math.PI * 1.1);
+    ctx.strokeStyle = arcGrad;
+    ctx.lineWidth = 4.5;
+    ctx.shadowColor = "#818cf8";
+    ctx.shadowBlur = 22;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Three orbiting glowing orbs
+    for (const [offset, color] of [
+      [0, "#c084fc"],
+      [Math.PI * 0.72, "#60a5fa"],
+      [Math.PI * 1.44, "#a78bfa"],
+    ] as [number, string][]) {
+      const ox = cx + Math.cos(a + offset) * r1;
+      const oy = cy + Math.sin(a + offset) * r1;
+      const grd = ctx.createRadialGradient(ox, oy, 0, ox, oy, 10);
+      grd.addColorStop(0, "white");
+      grd.addColorStop(0.35, color);
+      grd.addColorStop(1, "transparent");
+      ctx.beginPath();
+      ctx.arc(ox, oy, 10, 0, Math.PI * 2);
+      ctx.fillStyle = grd;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 24;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+  });
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={size}
+      height={size}
+      className="absolute inset-0 w-full h-full"
+    />
+  );
+}
+
+/* ─── Floating code symbols ─── */
+const FLOATERS: { sym: string; left: string; top: string; fontSize: string; delay: number }[] = [
+  { sym: "{ }",  left: "7%",  top: "20%", fontSize: "1.2rem", delay: 0.0 },
+  { sym: "</>",  left: "83%", top: "16%", fontSize: "1.1rem", delay: 0.6 },
+  { sym: "[ ]",  left: "5%",  top: "60%", fontSize: "1rem",   delay: 1.1 },
+  { sym: "=>",   left: "87%", top: "60%", fontSize: "1.1rem", delay: 0.3 },
+  { sym: "git",  left: "76%", top: "30%", fontSize: "0.9rem", delay: 0.9 },
+  { sym: "fn()", left: "16%", top: "78%", fontSize: "0.85rem",delay: 1.5 },
+  { sym: "//",   left: "4%",  top: "38%", fontSize: "1rem",   delay: 1.8 },
+  { sym: ">>>",  left: "89%", top: "43%", fontSize: "0.9rem", delay: 0.2 },
+  { sym: "null", left: "78%", top: "75%", fontSize: "0.8rem", delay: 1.0 },
 ];
 
-const steps = [
-  { icon: Lock, label: "Sign in with GitHub or Google" },
-  { icon: GitBranch, label: "Submit your repo or PR URL" },
-  { icon: Eye, label: "Watch real-time AI analysis" },
-  { icon: CheckCircle, label: "Review issues with fix patches" },
+/* ─── Floating mini UI cards ─── */
+const CARDS = [
+  { icon: "🔒", label: "Security Scan",  left: "67%", top: "12%", delay: 0.5 },
+  { icon: "🧪", label: "Code Smell",     left: "4%",  top: "10%", delay: 1.3 },
+  { icon: "⚡", label: "Arch Review",    left: "75%", top: "74%", delay: 0.7 },
+  { icon: "📋", label: "Patch Ready",    left: "2%",  top: "75%", delay: 1.6 },
 ];
-
-const exampleIssues = [
-  { severity: "critical", category: "security", title: "SQL Injection Vulnerability", file: "src/db/queries.ts", line: 42 },
-  { severity: "high", category: "security", title: "Hardcoded API Secret", file: "src/config/env.ts", line: 8 },
-  { severity: "medium", category: "code_smell", title: "God Function — 200+ Lines", file: "src/utils/process.ts", line: 15 },
-  { severity: "low", category: "architecture", title: "Tight Coupling to ORM", file: "src/models/user.ts", line: 1 },
-];
-
-const severityColors: Record<string, string> = {
-  critical: "bg-red-500/15 text-red-400 border-red-500/30",
-  high: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  medium: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-  low: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-};
 
 export default function LandingPage() {
   const [, setLocation] = useLocation();
-  const { signIn } = useSignIn();
-  const { scrollY } = useScroll();
-  const heroY = useTransform(scrollY, [0, 400], [0, -60]);
-
-  const handleGithubSignIn = async () => {
-    try {
-      await signIn?.authenticateWithRedirect({
-        strategy: "oauth_github",
-        redirectUrl: `${window.location.origin}${import.meta.env.BASE_URL}sign-in/sso-callback`,
-        redirectUrlComplete: `${window.location.origin}${import.meta.env.BASE_URL}dashboard`,
-      });
-    } catch {
-      setLocation("/sign-in");
-    }
-  };
+  const { displayed, done } = useTypewriter("CodeInsight", 85, 1300);
+  const SIZE = 320;
 
   return (
-    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
-      {/* Hero */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
-        <ParticleCanvas />
-        <div className="absolute inset-0 bg-grid opacity-40" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background pointer-events-none" />
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+    <div
+      className="relative min-h-screen overflow-hidden flex flex-col items-center justify-center"
+      style={{ background: "#04071a" }}
+    >
+      {/* Particle layer */}
+      <ParticleCanvas />
 
+      {/* Radial glow behind center */}
+      <div
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none rounded-full"
+        style={{
+          width: 700, height: 700,
+          background: "radial-gradient(circle, rgba(100,40,220,0.18) 0%, rgba(30,60,180,0.08) 50%, transparent 75%)",
+          filter: "blur(8px)",
+        }}
+      />
+
+      {/* Moving gradient band */}
+      <motion.div
+        className="absolute inset-0 pointer-events-none"
+        animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+        transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+        style={{
+          background: "linear-gradient(120deg, transparent 25%, rgba(124,58,237,0.07) 50%, transparent 75%)",
+          backgroundSize: "250% 250%",
+        }}
+      />
+
+      {/* Floating code symbols */}
+      {FLOATERS.map((f) => (
         <motion.div
-          style={{ y: heroY }}
-          className="relative z-10 text-center px-6 max-w-5xl mx-auto"
+          key={f.sym}
+          className="absolute font-mono font-bold pointer-events-none select-none"
+          style={{
+            left: f.left,
+            top: f.top,
+            fontSize: f.fontSize,
+            color: "rgba(167,139,250,0.55)",
+            textShadow: "0 0 14px rgba(139,92,246,0.7)",
+          }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0, 0.65, 0.38, 0.65], y: [0, -10, 5, -10] }}
+          transition={{
+            opacity: { delay: f.delay + 1.2, duration: 3.5, repeat: Infinity, ease: "easeInOut" },
+            y: { delay: f.delay + 1.2, duration: 4.5 + f.delay * 0.5, repeat: Infinity, ease: "easeInOut" },
+          }}
         >
+          {f.sym}
+        </motion.div>
+      ))}
+
+      {/* Floating mini cards */}
+      {CARDS.map((c) => (
+        <motion.div
+          key={c.label}
+          className="absolute pointer-events-none select-none flex items-center gap-2 px-3 py-2 rounded-xl"
+          style={{
+            left: c.left,
+            top: c.top,
+            background: "rgba(255,255,255,0.04)",
+            backdropFilter: "blur(12px)",
+            border: "1px solid rgba(139,92,246,0.22)",
+            boxShadow: "0 0 18px rgba(139,92,246,0.18)",
+          }}
+          initial={{ opacity: 0, scale: 0.75 }}
+          animate={{ opacity: [0, 0.9, 0.65, 0.9], y: [0, -7, 4, -7], scale: [0.75, 1, 1, 1] }}
+          transition={{
+            opacity: { delay: c.delay + 1.6, duration: 4, repeat: Infinity, ease: "easeInOut" },
+            y: { delay: c.delay + 1.6, duration: 5 + c.delay * 0.4, repeat: Infinity, ease: "easeInOut" },
+            scale: { delay: c.delay + 1.6, duration: 0.5 },
+          }}
+        >
+          <span style={{ fontSize: "0.85rem" }}>{c.icon}</span>
+          <span className="text-xs font-medium whitespace-nowrap" style={{ color: "rgba(255,255,255,0.65)" }}>
+            {c.label}
+          </span>
+        </motion.div>
+      ))}
+
+      {/* ── Main content ── */}
+      <div className="relative z-10 flex flex-col items-center gap-0" style={{ marginTop: "-20px" }}>
+
+        {/* Orbital ring + laptop image */}
+        <div
+          className="relative flex items-center justify-center"
+          style={{ width: SIZE, height: SIZE }}
+        >
+          <OrbitalRings size={SIZE} />
+
+          {/* Inner soft glow */}
+          <div
+            className="absolute rounded-full pointer-events-none"
+            style={{
+              width: "52%", height: "52%",
+              background: "radial-gradient(circle, rgba(80,30,160,0.5) 0%, rgba(30,50,140,0.25) 60%, transparent 90%)",
+            }}
+          />
+
+          {/* Laptop image — floating */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium mb-8"
+            className="absolute flex items-center justify-center"
+            style={{ width: "52%", height: "52%" }}
+            animate={{ y: [-7, 7, -7] }}
+            transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
           >
-            <Zap size={14} />
-            AI-powered code intelligence
+            <img
+              src="/laptop-hero.png"
+              alt="CodeInsight"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                borderRadius: "50%",
+                filter: "drop-shadow(0 0 20px rgba(124,58,237,0.75)) drop-shadow(0 0 50px rgba(59,130,246,0.4))",
+              }}
+            />
           </motion.div>
+        </div>
 
-          <motion.h1
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.1 }}
-            className="text-6xl md:text-8xl font-bold tracking-tight mb-6"
+        {/* App name — typewriter */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.0, duration: 0.5 }}
+          className="flex items-baseline justify-center"
+          style={{ marginTop: "-8px" }}
+        >
+          <h1
+            style={{
+              fontSize: "clamp(2.6rem, 6vw, 4.5rem)",
+              fontWeight: 800,
+              letterSpacing: "-0.02em",
+              lineHeight: 1,
+              background: "linear-gradient(135deg, #c084fc 0%, #818cf8 45%, #60a5fa 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+              filter: done ? "drop-shadow(0 0 22px rgba(139,92,246,0.65))" : "none",
+              transition: "filter 0.6s ease",
+              minWidth: "1ch",
+            }}
           >
-            <span className="text-gradient-purple">Code Insight</span>
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.2 }}
-            className="text-xl md:text-2xl text-muted-foreground mb-12 max-w-2xl mx-auto leading-relaxed"
-          >
-            AI-powered Code Review Agent — security, quality, and architecture analysis in seconds.
-          </motion.p>
-
-          {/* Login Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.3 }}
-            className="glass-purple rounded-2xl p-8 max-w-sm mx-auto"
-            style={{ boxShadow: "0 0 40px rgba(139,92,246,0.15), 0 0 80px rgba(139,92,246,0.05)" }}
-          >
-            <h2 className="text-lg font-semibold mb-2 text-white">Get started for free</h2>
-            <p className="text-muted-foreground text-sm mb-6">Sign in to start analyzing your code</p>
-            <div className="space-y-3">
-              <button
-                onClick={handleGithubSignIn}
-                data-testid="button-github-signin"
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#0d1117] border border-white/10 rounded-lg text-white text-sm font-medium hover:bg-white/5 hover:border-purple-500/30 transition-all duration-200"
-              >
-                <SiGithub size={18} />
-                Continue with GitHub
-              </button>
-              <button
-                onClick={() => setLocation("/sign-in")}
-                data-testid="button-google-signin"
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#0d1117] border border-white/10 rounded-lg text-white text-sm font-medium hover:bg-white/5 hover:border-purple-500/30 transition-all duration-200"
-              >
-                <SiGoogle size={16} />
-                Continue with Google
-              </button>
-            </div>
-            <p className="text-muted-foreground text-xs mt-4 text-center">
-              Free tier. No credit card required.
-            </p>
-          </motion.div>
+            {displayed || "\u00A0"}
+          </h1>
+          {!done && (
+            <motion.span
+              animate={{ opacity: [1, 0, 1] }}
+              transition={{ duration: 0.75, repeat: Infinity }}
+              style={{
+                display: "inline-block",
+                width: "3px",
+                height: "0.8em",
+                background: "#a78bfa",
+                marginLeft: "4px",
+                borderRadius: "2px",
+                boxShadow: "0 0 10px rgba(167,139,250,0.9)",
+                verticalAlign: "middle",
+              }}
+            />
+          )}
         </motion.div>
 
-        {/* Scroll indicator */}
-        <motion.div
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-muted-foreground text-xs"
-          animate={{ y: [0, 8, 0] }}
-          transition={{ repeat: Infinity, duration: 2 }}
+        {/* Tagline */}
+        <motion.p
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 2.7, duration: 0.8 }}
+          style={{
+            marginTop: "14px",
+            fontSize: "1.05rem",
+            color: "rgba(255,255,255,0.42)",
+            textAlign: "center",
+            maxWidth: "340px",
+            textShadow: "0 0 20px rgba(139,92,246,0.25)",
+            letterSpacing: "0.01em",
+          }}
         >
-          <div className="w-px h-8 bg-gradient-to-b from-transparent to-purple-500/50" />
-        </motion.div>
-      </section>
+          Let your mind breathe. We handle the bugs.
+        </motion.p>
 
-      {/* Features */}
-      <section className="py-32 px-6 relative">
-        <div className="max-w-6xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl font-bold text-white mb-4">What we analyze</h2>
-            <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-              Three specialized AI agents examine your code from different angles simultaneously.
-            </p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {features.map((f, i) => (
-              <motion.div
-                key={f.title}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className={`group glass rounded-xl p-6 hover:border-white/15 transition-all duration-300 ${f.glow} hover:shadow-lg`}
-              >
-                <f.icon className={`${f.color} mb-4`} size={24} />
-                <h3 className="font-semibold text-white mb-2">{f.title}</h3>
-                <p className="text-muted-foreground text-sm leading-relaxed">{f.desc}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Live preview of issues */}
-      <section className="py-24 px-6 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-purple-950/10 via-transparent to-blue-950/10" />
-        <div className="max-w-6xl mx-auto relative">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-            >
-              <h2 className="text-4xl font-bold text-white mb-4">Real issues. Real fixes.</h2>
-              <p className="text-muted-foreground text-lg mb-8 leading-relaxed">
-                Every issue comes with a line-level location, detailed explanation, and a ready-to-apply patch. Not suggestions — solutions.
-              </p>
-              <ul className="space-y-3 text-muted-foreground">
-                {["File path and exact line number", "Old vs. new code diff", "Detailed explanation", "One-click patch download"].map((item) => (
-                  <li key={item} className="flex items-center gap-3 text-sm">
-                    <CheckCircle size={16} className="text-green-400 shrink-0" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, x: 30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              className="glass rounded-2xl overflow-hidden"
-            >
-              <div className="border-b border-white/5 px-4 py-3 flex items-center gap-2">
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-red-500/70" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-500/70" />
-                  <div className="w-3 h-3 rounded-full bg-green-500/70" />
-                </div>
-                <span className="text-muted-foreground text-xs ml-2 font-mono">Issues — example-repo</span>
-              </div>
-              <div className="p-4 space-y-2">
-                {exampleIssues.map((issue, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: 10 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: i * 0.1 }}
-                    className="flex items-start gap-3 p-3 rounded-lg bg-white/3 hover:bg-white/5 transition-colors cursor-pointer"
-                  >
-                    <span className={`text-xs px-2 py-0.5 rounded border font-medium shrink-0 ${severityColors[issue.severity]}`}>
-                      {issue.severity}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm text-white font-medium truncate">{issue.title}</p>
-                      <p className="text-xs text-muted-foreground font-mono mt-0.5">{issue.file}:{issue.line}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section className="py-24 px-6">
-        <div className="max-w-4xl mx-auto text-center">
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-4xl font-bold text-white mb-16"
-          >
-            How it works
-          </motion.h2>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {steps.map((step, i) => (
-              <motion.div
-                key={step.label}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className="flex flex-col items-center gap-4"
-              >
-                <div className="w-12 h-12 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center">
-                  <step.icon size={20} className="text-purple-400" />
-                </div>
-                <div className="w-6 h-6 rounded-full bg-muted text-muted-foreground text-xs flex items-center justify-center font-bold">
-                  {i + 1}
-                </div>
-                <p className="text-sm text-muted-foreground text-center leading-relaxed">{step.label}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Terminal demo */}
-      <section className="py-24 px-6">
-        <div className="max-w-3xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="glass rounded-2xl overflow-hidden"
-            style={{ boxShadow: "0 0 40px rgba(139,92,246,0.1)" }}
-          >
-            <div className="border-b border-white/5 px-4 py-3 flex items-center gap-2">
-              <Terminal size={14} className="text-purple-400" />
-              <span className="text-muted-foreground text-xs font-mono">Analysis in progress...</span>
-            </div>
-            <div className="p-6 font-mono text-sm space-y-2">
-              {[
-                { icon: "✓", text: "Cloning repository...", color: "text-green-400" },
-                { icon: "✓", text: "Parsing 47 files (8,234 lines)", color: "text-green-400" },
-                { icon: "✓", text: "Detected: TypeScript, Python", color: "text-green-400" },
-                { icon: "►", text: "Running security analysis...", color: "text-purple-400" },
-                { icon: " ", text: "Scanning for injection vulnerabilities", color: "text-muted-foreground" },
-                { icon: " ", text: "Checking authentication flows", color: "text-muted-foreground" },
-              ].map((line, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0 }}
-                  whileInView={{ opacity: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.15 }}
-                  className="flex items-center gap-3"
-                >
-                  <span className={line.color}>{line.icon}</span>
-                  <span className={line.color === "text-muted-foreground" ? "text-muted-foreground" : "text-foreground"}>
-                    {line.text}
-                  </span>
-                </motion.div>
-              ))}
-              <motion.div
-                animate={{ opacity: [1, 0, 1] }}
-                transition={{ repeat: Infinity, duration: 1.2 }}
-                className="w-2 h-4 bg-purple-400 inline-block"
-              />
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-32 px-6 text-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-radial from-purple-900/20 to-transparent" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl" />
+        {/* CTA Button */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="relative z-10 max-w-2xl mx-auto"
+          initial={{ opacity: 0, scale: 0.88 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 3.1, duration: 0.5 }}
+          style={{ marginTop: "28px" }}
         >
-          <h2 className="text-5xl font-bold text-white mb-6">Ship safer code today</h2>
-          <p className="text-muted-foreground text-lg mb-10">
-            Join developers who use Code Insight to catch bugs before their users do.
-          </p>
-          <Button
-            onClick={() => setLocation("/sign-up")}
-            data-testid="button-cta-signup"
-            className="bg-purple-600 hover:bg-purple-500 text-white px-8 py-4 text-base font-semibold rounded-xl glow-purple transition-all duration-200 h-auto"
+          <motion.button
+            onClick={() => setLocation("/sign-in")}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.94 }}
+            style={{
+              position: "relative",
+              padding: "14px 48px",
+              borderRadius: "14px",
+              fontSize: "1.05rem",
+              fontWeight: 700,
+              color: "#fff",
+              background: "linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%)",
+              boxShadow: "0 0 32px rgba(124,58,237,0.55), 0 0 64px rgba(59,130,246,0.22)",
+              border: "none",
+              cursor: "pointer",
+              overflow: "hidden",
+              letterSpacing: "0.02em",
+            }}
           >
-            Start reviewing code <ChevronRight size={18} className="ml-2" />
-          </Button>
+            {/* Shimmer sweep */}
+            <motion.span
+              style={{
+                position: "absolute",
+                inset: 0,
+                background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.22) 50%, transparent 100%)",
+                transform: "skewX(-15deg)",
+              }}
+              animate={{ x: ["-120%", "220%"] }}
+              transition={{ duration: 2.8, repeat: Infinity, repeatDelay: 1.2, ease: "easeInOut" }}
+            />
+            <span style={{ position: "relative", zIndex: 1 }}>Login</span>
+          </motion.button>
         </motion.div>
-      </section>
+      </div>
 
-      {/* Footer */}
-      <footer className="border-t border-white/5 py-8 px-6 text-center text-muted-foreground text-sm">
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <Code2 size={16} className="text-purple-400" />
-          <span className="text-white font-semibold">Code Insight</span>
-        </div>
-        <p>AI-powered code review for serious developers.</p>
-      </footer>
+      {/* Bottom fade */}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-28 pointer-events-none"
+        style={{ background: "linear-gradient(to top, #04071a 0%, transparent 100%)" }}
+      />
     </div>
   );
 }
