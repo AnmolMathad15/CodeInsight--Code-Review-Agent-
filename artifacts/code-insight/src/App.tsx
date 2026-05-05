@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ClerkProvider, SignIn, SignUp, Show } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
+import type { LocalizationResource } from "@clerk/types";
 import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
@@ -33,7 +34,7 @@ const clerkAppearance = {
   options: {
     logoPlacement: "inside" as const,
     logoLinkUrl: basePath || "/",
-    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
+    logoImageUrl: `${window.location.origin}${basePath}/logo.png`,
     socialButtonsPlacement: "bottom" as const,
   },
   variables: {
@@ -66,7 +67,30 @@ const clerkAppearance = {
     identityPreviewEditButtonIcon: "text-purple-400",
     formButtonPrimary: "bg-purple-600 hover:bg-purple-500 text-white",
     otpCodeFieldInput: "bg-[#111827] border-white/10 text-white",
+    logoImage: "rounded-full shadow-[0_0_24px_6px_rgba(139,92,246,0.55)]",
   },
+};
+
+const clerkLocalization: Partial<LocalizationResource> = {
+  signIn: {
+    start: {
+      title: "Sign in to CodeInsight",
+      subtitle: "Welcome back",
+      actionText: "",
+      actionLink: "",
+      actionLink__use_email: "",
+      actionLink__use_phone: "",
+      actionLink__use_username: "",
+    },
+  } as LocalizationResource["signIn"],
+  signUp: {
+    start: {
+      title: "Create your CodeInsight account",
+      subtitle: "Get started for free",
+      actionText: "",
+      actionLink: "",
+    },
+  } as LocalizationResource["signUp"],
 };
 
 function HomeRedirect() {
@@ -158,6 +182,7 @@ function App() {
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
       afterSignOutUrl={`${basePath}/`}
+      localization={clerkLocalization as LocalizationResource}
     >
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
