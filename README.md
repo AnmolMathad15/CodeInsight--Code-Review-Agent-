@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/<img width="1536" height="1024" alt="Codehero-banner" src="https://github.com/user-attachments/assets/b898767c-839a-4077-949c-e58df89f1812" />" alt="CodeInsight Hero Banner" width="100%" />
+  <img src="./attached_assets/codehero-banner.png" width="100%" />
 </p>
 
 <h1 align="center">🚀 CodeInsight</h1>
