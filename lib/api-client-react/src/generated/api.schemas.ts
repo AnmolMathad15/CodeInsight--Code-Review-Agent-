@@ -35,8 +35,8 @@ export const ReviewStatus = {
 export interface Review {
   id: string;
   userId: string;
-  repoUrl?: string;
-  repoName?: string;
+  repoUrl?: string | null;
+  repoName?: string | null;
   repoType: ReviewRepoType;
   prUrl?: string | null;
   status: ReviewStatus;
@@ -47,6 +47,10 @@ export interface Review {
   linesAnalyzed?: number | null;
   currentStep?: string | null;
   errorMessage?: string | null;
+  scoresSecurity?: number | null;
+  scoresMaintainability?: number | null;
+  scoresComplexity?: number | null;
+  scoresDuplication?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,6 +88,11 @@ export interface Issue {
   oldCode?: string | null;
   newCode?: string | null;
   fixSuggestion?: string | null;
+  confidenceScore?: number | null;
+  impactLevel?: string | null;
+  affectedFiles?: string[] | null;
+  dependencyChain?: string[] | null;
+  fixApplied?: boolean | null;
   createdAt: string;
 }
 
@@ -110,6 +119,76 @@ export interface CreateReviewBody {
 export interface PatchResponse {
   patch: string;
   filename: string;
+}
+
+export type FixSnapshotStatus =
+  (typeof FixSnapshotStatus)[keyof typeof FixSnapshotStatus];
+
+export const FixSnapshotStatus = {
+  applied: "applied",
+  reverted: "reverted",
+} as const;
+
+export interface FixSnapshot {
+  id: number;
+  issueId: number;
+  reviewId: number;
+  filePath: string;
+  originalCode: string;
+  patchContent: string;
+  status: FixSnapshotStatus;
+  appliedAt: string;
+  revertedAt?: string | null;
+}
+
+export interface ApplyFixBody {
+  issueId: number;
+}
+
+export type FixValidationSyntax =
+  (typeof FixValidationSyntax)[keyof typeof FixValidationSyntax];
+
+export const FixValidationSyntax = {
+  passed: "passed",
+  failed: "failed",
+} as const;
+
+export type FixValidationImports =
+  (typeof FixValidationImports)[keyof typeof FixValidationImports];
+
+export const FixValidationImports = {
+  safe: "safe",
+  warning: "warning",
+} as const;
+
+export type FixValidationRiskLevel =
+  (typeof FixValidationRiskLevel)[keyof typeof FixValidationRiskLevel];
+
+export const FixValidationRiskLevel = {
+  safe: "safe",
+  moderate: "moderate",
+  "high-risk": "high-risk",
+} as const;
+
+export interface FixValidation {
+  syntax: FixValidationSyntax;
+  imports: FixValidationImports;
+  riskLevel: FixValidationRiskLevel;
+  affectedFilesCount: number;
+  message: string;
+}
+
+export interface ApplyFixResponse {
+  snapshotId: number;
+  message: string;
+  validation: FixValidation;
+  newHealthScore?: number | null;
+}
+
+export interface RevertFixResponse {
+  message: string;
+  originalCode?: string | null;
+  newHealthScore?: number | null;
 }
 
 export interface DashboardSummary {

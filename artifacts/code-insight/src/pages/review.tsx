@@ -8,8 +8,10 @@ import {
   getGetReviewQueryKey,
   getGetReviewPatchQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import ApplyFixModal from "@/components/ApplyFixModal";
 import {
   Code2,
   ArrowLeft,
@@ -23,6 +25,7 @@ import {
   CheckCircle,
   X,
   Filter,
+  RotateCcw,
 } from "lucide-react";
 
 interface Props { id: string }
@@ -98,7 +101,16 @@ export default function ReviewPage({ id }: Props) {
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showFixModal, setShowFixModal] = useState(false);
 
+  // Local state tracking applied fixes this session: issueId → snapshotId
+  const [appliedFixes, setAppliedFixes] = useState<Record<string, number>>({});
+  // Local state tracking reverted fixes this session
+  const [revertedFixes, setRevertedFixes] = useState<Set<string>>(new Set());
+  // Optimistic health score override
+  const [healthScoreOverride, setHealthScoreOverride] = useState<number | null>(null);
+
+  const queryClient = useQueryClient();
   const review = useGetReview(id, { query: { queryKey: getGetReviewQueryKey(id) } });
   const patch = useGetReviewPatch(id, {
     query: { queryKey: getGetReviewPatchQueryKey(id), enabled: !!review.data },
@@ -106,10 +118,15 @@ export default function ReviewPage({ id }: Props) {
 
   const issues = review.data?.issues ?? [];
 
-  // Build file tree
+  // Merge DB fixApplied state with local session state
+  const isIssueFixed = (issueId: string): boolean => {
+    if (revertedFixes.has(issueId)) return false;
+    if (appliedFixes[issueId] != null) return true;
+    return !!(issues.find((i) => i.id === issueId)?.fixApplied);
+  };
+
   const files = Array.from(new Set(issues.map((i) => i.file))).sort();
 
-  // Filter issues
   const filtered = issues.filter((issue) => {
     if (filterSeverity && issue.severity !== filterSeverity) return false;
     if (filterCategory && issue.category !== filterCategory) return false;
@@ -137,8 +154,30 @@ export default function ReviewPage({ id }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const handleFixApplied = (snapshotId: number, newHealthScore: number | null) => {
+    if (!selectedIssueId) return;
+    setAppliedFixes((prev) => ({ ...prev, [selectedIssueId]: snapshotId }));
+    setRevertedFixes((prev) => { const s = new Set(prev); s.delete(selectedIssueId); return s; });
+    if (newHealthScore != null) setHealthScoreOverride(newHealthScore);
+    // Refetch review in background to sync server state
+    queryClient.invalidateQueries({ queryKey: getGetReviewQueryKey(id) });
+  };
+
+  const handleFixReverted = (newHealthScore: number | null) => {
+    if (!selectedIssueId) return;
+    setRevertedFixes((prev) => new Set([...prev, selectedIssueId]));
+    setAppliedFixes((prev) => { const copy = { ...prev }; delete copy[selectedIssueId]; return copy; });
+    if (newHealthScore != null) setHealthScoreOverride(newHealthScore);
+    setShowFixModal(false);
+    queryClient.invalidateQueries({ queryKey: getGetReviewQueryKey(id) });
+  };
+
+  const displayedHealthScore = healthScoreOverride ?? review.data?.healthScore ?? null;
+
   const severities = ["critical", "high", "medium", "low", "info"];
-  const categories = ["security", "code_smell", "architecture", "performance", "other"];
+
+  const fixedInSession = selectedIssueId != null && isIssueFixed(selectedIssueId);
+  const currentSnapshotId = selectedIssueId != null ? (appliedFixes[selectedIssueId] ?? undefined) : undefined;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -158,7 +197,16 @@ export default function ReviewPage({ id }: Props) {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            {review.data && <HealthGauge score={review.data.healthScore} />}
+            {review.data && (
+              <motion.div
+                key={Math.round(displayedHealthScore ?? 0)}
+                initial={{ scale: 1 }}
+                animate={{ scale: [1, 1.08, 1] }}
+                transition={{ duration: 0.4 }}
+              >
+                <HealthGauge score={displayedHealthScore} />
+              </motion.div>
+            )}
             {patch.data && (
               <Button
                 onClick={handleDownloadPatch}
@@ -253,39 +301,51 @@ export default function ReviewPage({ id }: Props) {
                   No issues match the current filter
                 </div>
               )}
-              {filtered.map((issue, i) => (
-                <motion.button
-                  key={issue.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.03 }}
-                  onClick={() => setSelectedIssueId(issue.id === selectedIssueId ? null : issue.id)}
-                  data-testid={`issue-${issue.id}`}
-                  className={`w-full text-left p-3 rounded-xl border transition-all duration-200 ${
-                    selectedIssueId === issue.id
-                      ? "border-purple-500/40 bg-purple-500/10"
-                      : "border-white/5 bg-white/2 hover:border-white/10 hover:bg-white/4"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <span className="text-sm text-white font-medium leading-snug">{issue.title}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded border shrink-0 ${severityColors[issue.severity]}`}>
-                      {issue.severity}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      {categoryIcons[issue.category]}
-                      {issue.category.replace("_", " ")}
-                    </span>
-                    <span className="text-white/20">·</span>
-                    <span className="font-mono truncate">
-                      {issue.file.split("/").pop()}
-                      {issue.line != null ? `:${issue.line}` : ""}
-                    </span>
-                  </div>
-                </motion.button>
-              ))}
+              {filtered.map((issue, i) => {
+                const fixed = isIssueFixed(issue.id);
+                return (
+                  <motion.button
+                    key={issue.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                    onClick={() => setSelectedIssueId(issue.id === selectedIssueId ? null : issue.id)}
+                    data-testid={`issue-${issue.id}`}
+                    className={`w-full text-left p-3 rounded-xl border transition-all duration-200 ${
+                      selectedIssueId === issue.id
+                        ? "border-purple-500/40 bg-purple-500/10"
+                        : fixed
+                        ? "border-green-500/20 bg-green-500/5"
+                        : "border-white/5 bg-white/2 hover:border-white/10 hover:bg-white/4"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <span className="text-sm text-white font-medium leading-snug">{issue.title}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {fixed && (
+                          <span className="text-xs px-1.5 py-0.5 rounded border bg-green-500/15 text-green-400 border-green-500/30 flex items-center gap-1">
+                            <CheckCircle size={10} /> Fixed
+                          </span>
+                        )}
+                        <span className={`text-xs px-1.5 py-0.5 rounded border ${severityColors[issue.severity]}`}>
+                          {issue.severity}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        {categoryIcons[issue.category]}
+                        {issue.category.replace("_", " ")}
+                      </span>
+                      <span className="text-white/20">·</span>
+                      <span className="font-mono truncate">
+                        {issue.file.split("/").pop()}
+                        {issue.line != null ? `:${issue.line}` : ""}
+                      </span>
+                    </div>
+                  </motion.button>
+                );
+              })}
             </div>
           </div>
 
@@ -317,6 +377,23 @@ export default function ReviewPage({ id }: Props) {
                       <X size={16} />
                     </button>
                   </div>
+
+                  {/* Fixed badge */}
+                  <AnimatePresence>
+                    {fixedInSession && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="mb-4 overflow-hidden"
+                      >
+                        <div className="flex items-center gap-2 p-2.5 rounded-lg bg-green-500/10 border border-green-500/20">
+                          <CheckCircle size={14} className="text-green-400 shrink-0" />
+                          <span className="text-xs text-green-300 font-medium">Fix applied — patch committed to sandbox workspace</span>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   {/* Location */}
                   <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono mb-4 p-2 rounded bg-white/3 border border-white/5">
@@ -354,30 +431,56 @@ export default function ReviewPage({ id }: Props) {
                   )}
 
                   {/* Action buttons */}
-                  <div className="flex gap-2">
-                    {selectedIssue.newCode && (
+                  <div className="space-y-2">
+                    {/* Apply Fix button — only if fix code exists */}
+                    {selectedIssue.newCode && !fixedInSession && (
                       <Button
-                        onClick={handleCopyFix}
-                        data-testid="button-copy-fix"
+                        onClick={() => setShowFixModal(true)}
+                        data-testid="button-apply-fix"
+                        className="w-full bg-purple-600 hover:bg-purple-500 text-white text-sm h-9"
+                      >
+                        <Zap size={14} className="mr-1.5" /> Apply Fix
+                      </Button>
+                    )}
+
+                    {/* Revert Fix button — only when fixed */}
+                    {fixedInSession && currentSnapshotId != null && (
+                      <Button
+                        onClick={() => setShowFixModal(true)}
+                        data-testid="button-revert-fix"
                         variant="outline"
-                        className="flex-1 border-white/10 text-white hover:bg-white/5 text-sm h-9"
+                        className="w-full border-white/10 text-white hover:bg-white/5 text-sm h-9"
                       >
-                        {copied ? (
-                          <><CheckCircle size={14} className="mr-1.5 text-green-400" /> Copied</>
-                        ) : (
-                          <><Copy size={14} className="mr-1.5" /> Copy Fix</>
-                        )}
+                        <RotateCcw size={14} className="mr-1.5" /> Revert Fix
                       </Button>
                     )}
-                    {patch.data && (
-                      <Button
-                        onClick={handleDownloadPatch}
-                        data-testid="button-download-fix"
-                        className="flex-1 bg-purple-600 hover:bg-purple-500 text-white text-sm h-9"
-                      >
-                        <Download size={14} className="mr-1.5" /> Download Patch
-                      </Button>
-                    )}
+
+                    <div className="flex gap-2">
+                      {selectedIssue.newCode && (
+                        <Button
+                          onClick={handleCopyFix}
+                          data-testid="button-copy-fix"
+                          variant="outline"
+                          className="flex-1 border-white/10 text-white hover:bg-white/5 text-sm h-9"
+                        >
+                          {copied ? (
+                            <><CheckCircle size={14} className="mr-1.5 text-green-400" /> Copied</>
+                          ) : (
+                            <><Copy size={14} className="mr-1.5" /> Copy Fix</>
+                          )}
+                        </Button>
+                      )}
+                      {patch.data && (
+                        <Button
+                          onClick={handleDownloadPatch}
+                          data-testid="button-download-fix"
+                          variant="outline"
+                          className="flex-1 border-white/10 text-white hover:bg-white/5 text-sm h-9"
+                        >
+                          <Download size={14} className="mr-1.5" /> Download Patch
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </motion.div>
               ) : (
@@ -395,6 +498,21 @@ export default function ReviewPage({ id }: Props) {
           </div>
         </div>
       )}
+
+      {/* Apply Fix Modal */}
+      <AnimatePresence>
+        {showFixModal && selectedIssue && (
+          <ApplyFixModal
+            issue={selectedIssue}
+            reviewId={id}
+            snapshotId={currentSnapshotId}
+            isApplied={fixedInSession}
+            onClose={() => setShowFixModal(false)}
+            onApplied={handleFixApplied}
+            onReverted={handleFixReverted}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

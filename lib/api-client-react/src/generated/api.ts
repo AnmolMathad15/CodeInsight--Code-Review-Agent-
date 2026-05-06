@@ -18,13 +18,17 @@ import type {
 
 import type {
   ActivityItem,
+  ApplyFixBody,
+  ApplyFixResponse,
   CreateReviewBody,
   DashboardSummary,
   ErrorResponse,
+  FixSnapshot,
   GetGithubRepoInfoParams,
   GithubRepoInfo,
   HealthStatus,
   PatchResponse,
+  RevertFixResponse,
   Review,
   ReviewWithIssues,
 } from "./api.schemas";
@@ -39,7 +43,6 @@ type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const getHealthCheckUrl = () => {
@@ -528,6 +531,263 @@ export function useGetReviewPatch<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List fix snapshots for a review
+ */
+export const getListFixesUrl = (id: string) => {
+  return `/api/reviews/${id}/fixes`;
+};
+
+export const listFixes = async (
+  id: string,
+  options?: RequestInit,
+): Promise<FixSnapshot[]> => {
+  return customFetch<FixSnapshot[]>(getListFixesUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListFixesQueryKey = (id: string) => {
+  return [`/api/reviews/${id}/fixes`] as const;
+};
+
+export const getListFixesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listFixes>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listFixes>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListFixesQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listFixes>>> = ({
+    signal,
+  }) => listFixes(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof listFixes>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type ListFixesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listFixes>>
+>;
+export type ListFixesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List fix snapshots for a review
+ */
+
+export function useListFixes<
+  TData = Awaited<ReturnType<typeof listFixes>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listFixes>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListFixesQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Apply a validated fix for an issue
+ */
+export const getApplyFixUrl = (id: string) => {
+  return `/api/reviews/${id}/fixes`;
+};
+
+export const applyFix = async (
+  id: string,
+  applyFixBody: ApplyFixBody,
+  options?: RequestInit,
+): Promise<ApplyFixResponse> => {
+  return customFetch<ApplyFixResponse>(getApplyFixUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(applyFixBody),
+  });
+};
+
+export const getApplyFixMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof applyFix>>,
+    TError,
+    { id: string; data: BodyType<ApplyFixBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof applyFix>>,
+  TError,
+  { id: string; data: BodyType<ApplyFixBody> },
+  TContext
+> => {
+  const mutationKey = ["applyFix"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof applyFix>>,
+    { id: string; data: BodyType<ApplyFixBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return applyFix(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApplyFixMutationResult = NonNullable<
+  Awaited<ReturnType<typeof applyFix>>
+>;
+export type ApplyFixMutationBody = BodyType<ApplyFixBody>;
+export type ApplyFixMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Apply a validated fix for an issue
+ */
+export const useApplyFix = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof applyFix>>,
+    TError,
+    { id: string; data: BodyType<ApplyFixBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof applyFix>>,
+  TError,
+  { id: string; data: BodyType<ApplyFixBody> },
+  TContext
+> => {
+  return useMutation(getApplyFixMutationOptions(options));
+};
+
+/**
+ * @summary Revert an applied fix
+ */
+export const getRevertFixUrl = (id: string, snapshotId: string) => {
+  return `/api/reviews/${id}/fixes/${snapshotId}`;
+};
+
+export const revertFix = async (
+  id: string,
+  snapshotId: string,
+  options?: RequestInit,
+): Promise<RevertFixResponse> => {
+  return customFetch<RevertFixResponse>(getRevertFixUrl(id, snapshotId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getRevertFixMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revertFix>>,
+    TError,
+    { id: string; snapshotId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revertFix>>,
+  TError,
+  { id: string; snapshotId: string },
+  TContext
+> => {
+  const mutationKey = ["revertFix"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revertFix>>,
+    { id: string; snapshotId: string }
+  > = (props) => {
+    const { id, snapshotId } = props ?? {};
+
+    return revertFix(id, snapshotId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RevertFixMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revertFix>>
+>;
+
+export type RevertFixMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Revert an applied fix
+ */
+export const useRevertFix = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revertFix>>,
+    TError,
+    { id: string; snapshotId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof revertFix>>,
+  TError,
+  { id: string; snapshotId: string },
+  TContext
+> => {
+  return useMutation(getRevertFixMutationOptions(options));
+};
 
 /**
  * @summary Get dashboard summary stats

@@ -8,7 +8,7 @@ import { applyFix, revertFix, getReviewSnapshots } from "../lib/fixEngine";
 const fixesRouter = Router({ mergeParams: true });
 fixesRouter.use(clerkMiddleware());
 
-/** GET /api/reviews/:id/fixes  — list all fix snapshots for a review */
+/** GET /api/reviews/:id/fixes — list snapshots */
 fixesRouter.get("/", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
@@ -23,7 +23,7 @@ fixesRouter.get("/", async (req, res) => {
   return res.json(snapshots);
 });
 
-/** POST /api/reviews/:id/fixes  — apply a fix for an issue */
+/** POST /api/reviews/:id/fixes — apply a fix */
 fixesRouter.post("/", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
@@ -39,22 +39,27 @@ fixesRouter.post("/", async (req, res) => {
 
   const [issue] = await db.select().from(issuesTable).where(and(eq(issuesTable.id, issueId), eq(issuesTable.reviewId, reviewId)));
   if (!issue) return res.status(404).json({ error: "Issue not found" });
-
-  if (issue.fixApplied) return res.status(409).json({ error: "Fix already applied. Revert first." });
-
+  if (issue.fixApplied) return res.status(409).json({ error: "Fix already applied" });
   if (!issue.newCode) return res.status(422).json({ error: "No fix available for this issue" });
 
-  const originalCode = issue.oldCode ?? `// ${issue.file} — original content before fix`;
-  const result = await applyFix(issueId, reviewId, issue.file, originalCode, issue.newCode);
+  const originalCode = issue.oldCode ?? `// ${issue.file} — original`;
+  const affectedCount = (issue.affectedFiles ?? []).length;
+
+  const result = await applyFix(issueId, reviewId, issue.file, originalCode, issue.newCode, issue.severity, affectedCount);
 
   if (!result.valid) {
-    return res.status(422).json({ error: "Fix validation failed", detail: result.message });
+    return res.status(422).json({ error: "Validation failed", detail: result.message, validation: result.validation });
   }
 
-  return res.status(201).json({ snapshotId: result.snapshotId, message: result.message });
+  return res.status(201).json({
+    snapshotId: result.snapshotId,
+    message: result.message,
+    validation: result.validation,
+    newHealthScore: result.newHealthScore ?? null,
+  });
 });
 
-/** DELETE /api/reviews/:id/fixes/:snapshotId  — revert a fix */
+/** DELETE /api/reviews/:id/fixes/:snapshotId — revert a fix */
 fixesRouter.delete("/:snapshotId", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
@@ -72,7 +77,11 @@ fixesRouter.delete("/:snapshotId", async (req, res) => {
   const result = await revertFix(snapshotId, snapshot.issueId);
   if (!result.success) return res.status(409).json({ error: result.message });
 
-  return res.json({ message: result.message, originalCode: result.originalCode });
+  return res.json({
+    message: result.message,
+    originalCode: result.originalCode ?? null,
+    newHealthScore: result.newHealthScore ?? null,
+  });
 });
 
 export default fixesRouter;

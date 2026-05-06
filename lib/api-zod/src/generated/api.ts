@@ -8,7 +8,6 @@
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -21,8 +20,8 @@ export const HealthCheckResponse = zod.object({
 export const ListReviewsResponseItem = zod.object({
   id: zod.string(),
   userId: zod.string(),
-  repoUrl: zod.string().optional(),
-  repoName: zod.string().optional(),
+  repoUrl: zod.string().nullish(),
+  repoName: zod.string().nullish(),
   repoType: zod.enum(["github", "git_url", "zip"]),
   prUrl: zod.string().nullish(),
   status: zod.enum([
@@ -39,6 +38,10 @@ export const ListReviewsResponseItem = zod.object({
   linesAnalyzed: zod.number().nullish(),
   currentStep: zod.string().nullish(),
   errorMessage: zod.string().nullish(),
+  scoresSecurity: zod.number().nullish(),
+  scoresMaintainability: zod.number().nullish(),
+  scoresComplexity: zod.number().nullish(),
+  scoresDuplication: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -65,8 +68,8 @@ export const GetReviewResponse = zod
   .object({
     id: zod.string(),
     userId: zod.string(),
-    repoUrl: zod.string().optional(),
-    repoName: zod.string().optional(),
+    repoUrl: zod.string().nullish(),
+    repoName: zod.string().nullish(),
     repoType: zod.enum(["github", "git_url", "zip"]),
     prUrl: zod.string().nullish(),
     status: zod.enum([
@@ -83,6 +86,10 @@ export const GetReviewResponse = zod
     linesAnalyzed: zod.number().nullish(),
     currentStep: zod.string().nullish(),
     errorMessage: zod.string().nullish(),
+    scoresSecurity: zod.number().nullish(),
+    scoresMaintainability: zod.number().nullish(),
+    scoresComplexity: zod.number().nullish(),
+    scoresDuplication: zod.number().nullish(),
     createdAt: zod.string(),
     updatedAt: zod.string(),
   })
@@ -108,6 +115,11 @@ export const GetReviewResponse = zod
           oldCode: zod.string().nullish(),
           newCode: zod.string().nullish(),
           fixSuggestion: zod.string().nullish(),
+          confidenceScore: zod.number().nullish(),
+          impactLevel: zod.string().nullish(),
+          affectedFiles: zod.array(zod.string()).nullish(),
+          dependencyChain: zod.array(zod.string()).nullish(),
+          fixApplied: zod.boolean().nullish(),
           createdAt: zod.string(),
         }),
       ),
@@ -124,8 +136,8 @@ export const CancelReviewParams = zod.object({
 export const CancelReviewResponse = zod.object({
   id: zod.string(),
   userId: zod.string(),
-  repoUrl: zod.string().optional(),
-  repoName: zod.string().optional(),
+  repoUrl: zod.string().nullish(),
+  repoName: zod.string().nullish(),
   repoType: zod.enum(["github", "git_url", "zip"]),
   prUrl: zod.string().nullish(),
   status: zod.enum([
@@ -142,6 +154,10 @@ export const CancelReviewResponse = zod.object({
   linesAnalyzed: zod.number().nullish(),
   currentStep: zod.string().nullish(),
   errorMessage: zod.string().nullish(),
+  scoresSecurity: zod.number().nullish(),
+  scoresMaintainability: zod.number().nullish(),
+  scoresComplexity: zod.number().nullish(),
+  scoresDuplication: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -156,6 +172,51 @@ export const GetReviewPatchParams = zod.object({
 export const GetReviewPatchResponse = zod.object({
   patch: zod.string(),
   filename: zod.string(),
+});
+
+/**
+ * @summary List fix snapshots for a review
+ */
+export const ListFixesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListFixesResponseItem = zod.object({
+  id: zod.number(),
+  issueId: zod.number(),
+  reviewId: zod.number(),
+  filePath: zod.string(),
+  originalCode: zod.string(),
+  patchContent: zod.string(),
+  status: zod.enum(["applied", "reverted"]),
+  appliedAt: zod.string(),
+  revertedAt: zod.string().nullish(),
+});
+export const ListFixesResponse = zod.array(ListFixesResponseItem);
+
+/**
+ * @summary Apply a validated fix for an issue
+ */
+export const ApplyFixParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ApplyFixBody = zod.object({
+  issueId: zod.number(),
+});
+
+/**
+ * @summary Revert an applied fix
+ */
+export const RevertFixParams = zod.object({
+  id: zod.coerce.string(),
+  snapshotId: zod.coerce.string(),
+});
+
+export const RevertFixResponse = zod.object({
+  message: zod.string(),
+  originalCode: zod.string().nullish(),
+  newHealthScore: zod.number().nullish(),
 });
 
 /**

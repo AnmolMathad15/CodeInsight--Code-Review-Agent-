@@ -14,6 +14,8 @@ tags:
     description: Code review operations
   - name: dashboard
     description: Dashboard summary operations
+  - name: fixes
+    description: AutoFix operations
 
 paths:
   /healthz:
@@ -21,7 +23,6 @@ paths:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -135,6 +136,92 @@ paths:
               schema:
                 $ref: "#/components/schemas/PatchResponse"
 
+  /reviews/{id}/fixes:
+    get:
+      operationId: listFixes
+      tags: [fixes]
+      summary: List fix snapshots for a review
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of fix snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FixSnapshot"
+    post:
+      operationId: applyFix
+      tags: [fixes]
+      summary: Apply a validated fix for an issue
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyFixBody"
+      responses:
+        "201":
+          description: Fix applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplyFixResponse"
+        "409":
+          description: Fix already applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reviews/{id}/fixes/{snapshotId}:
+    delete:
+      operationId: revertFix
+      tags: [fixes]
+      summary: Revert an applied fix
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: snapshotId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Fix reverted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevertFixResponse"
+
   /dashboard/summary:
     get:
       operationId: getDashboardSummary
@@ -226,8 +313,10 @@ components:
           type: string
         repoUrl:
           type: string
+          nullable: true
         repoName:
           type: string
+          nullable: true
         repoType:
           type: string
           enum: [github, git_url, zip]
@@ -257,6 +346,18 @@ components:
           nullable: true
         errorMessage:
           type: string
+          nullable: true
+        scoresSecurity:
+          type: number
+          nullable: true
+        scoresMaintainability:
+          type: number
+          nullable: true
+        scoresComplexity:
+          type: number
+          nullable: true
+        scoresDuplication:
+          type: number
           nullable: true
         createdAt:
           type: string
@@ -302,6 +403,25 @@ components:
           nullable: true
         fixSuggestion:
           type: string
+          nullable: true
+        confidenceScore:
+          type: number
+          nullable: true
+        impactLevel:
+          type: string
+          nullable: true
+        affectedFiles:
+          type: array
+          items:
+            type: string
+          nullable: true
+        dependencyChain:
+          type: array
+          items:
+            type: string
+          nullable: true
+        fixApplied:
+          type: boolean
           nullable: true
         createdAt:
           type: string
@@ -354,6 +474,101 @@ components:
       required:
         - patch
         - filename
+
+    FixSnapshot:
+      type: object
+      properties:
+        id:
+          type: integer
+        issueId:
+          type: integer
+        reviewId:
+          type: integer
+        filePath:
+          type: string
+        originalCode:
+          type: string
+        patchContent:
+          type: string
+        status:
+          type: string
+          enum: [applied, reverted]
+        appliedAt:
+          type: string
+        revertedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - issueId
+        - reviewId
+        - filePath
+        - originalCode
+        - patchContent
+        - status
+        - appliedAt
+
+    ApplyFixBody:
+      type: object
+      properties:
+        issueId:
+          type: integer
+      required:
+        - issueId
+
+    FixValidation:
+      type: object
+      properties:
+        syntax:
+          type: string
+          enum: [passed, failed]
+        imports:
+          type: string
+          enum: [safe, warning]
+        riskLevel:
+          type: string
+          enum: [safe, moderate, high-risk]
+        affectedFilesCount:
+          type: integer
+        message:
+          type: string
+      required:
+        - syntax
+        - imports
+        - riskLevel
+        - affectedFilesCount
+        - message
+
+    ApplyFixResponse:
+      type: object
+      properties:
+        snapshotId:
+          type: integer
+        message:
+          type: string
+        validation:
+          $ref: "#/components/schemas/FixValidation"
+        newHealthScore:
+          type: number
+          nullable: true
+      required:
+        - snapshotId
+        - message
+        - validation
+
+    RevertFixResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        originalCode:
+          type: string
+          nullable: true
+        newHealthScore:
+          type: number
+          nullable: true
+      required:
+        - message
 
     DashboardSummary:
       type: object
