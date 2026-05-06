@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="codehero-banner.png" width="100%" />
+  <img src="./Codehero-banner.png" width="100%" />
 </p>
 
 <h1 align="center">🚀 CodeInsight</h1>
