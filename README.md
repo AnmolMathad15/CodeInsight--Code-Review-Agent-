@@ -11,7 +11,9 @@ Let your mind breathe, we handle the bugs.
 <p align="center">
   <b>Repository-Aware Autonomous AI Code Review & AutoFix Platform</b>
 </p>
+🚀 Live Demo
 
+🔗 https://code-insight--lazykoala151515.replit.app
 ---
 
 # 🧠 About CodeInsight
